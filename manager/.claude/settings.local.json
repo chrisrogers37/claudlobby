@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_telegram_telegram__reply",
+      "mcp__plugin_telegram_telegram__edit_message",
+      "mcp__plugin_telegram_telegram__react",
+      "mcp__plugin_telegram_telegram__download_attachment",
+      "mcp__github__*",
+      "mcp__notion__*",
+      "mcp__slack__*",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(tmux send-keys *)",
+      "Bash(tmux capture-pane *)",
+      "Bash(tmux list-sessions *)",
+      "Bash(tmux has-session *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(jq *)",
+      "Bash(curl *)",
+      "Bash(~/claudlobby/bot-common/report-back.sh *)",
+      "Bash(~/claudlobby/bot-common/tg-post.sh *)",
+      "Bash(~/claudlobby/bot-common/fleet-state-update.sh *)",
+      "Bash(launchctl kickstart -k gui/* *)",
+      "Bash(sudo systemctl restart *)"
+    ]
+  }
+}

@@ -37,4 +37,8 @@ done
 sleep 5  # buffer for MCP servers and channels
 
 tmux send-keys -t "$BOT_NAME" "$STARTUP_PROMPT" Enter
+
+# Mark bot as idle in fleet-state (if helper is present)
+[ -x "$(dirname "$0")/fleet-state-update.sh" ] && "$(dirname "$0")/fleet-state-update.sh" "$BOT_NAME" "idle" || true
+
 echo "$BOT_LABEL started"

@@ -22,3 +22,16 @@ done
 MESSAGE="[BOTREPORT] $BOT | $STATUS | $SUMMARY$EXTRAS"
 
 /usr/bin/tmux send-keys -t "$MANAGER_SESSION" "$MESSAGE" Enter
+
+# Mirror to fleet-state if helper is present
+_FS=$(dirname "$0")/fleet-state-update.sh
+if [ -x "$_FS" ]; then
+  case "$STATUS" in
+    completed) FS=idle ;;
+    blocked)   FS=blocked ;;
+    failed)    FS=idle ;;
+    progress)  FS=working ;;
+    *)         FS=idle ;;
+  esac
+  "$_FS" "$BOT_NAME" "$FS" "" "" "$SUMMARY" || true
+fi

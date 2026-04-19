@@ -1,10 +1,10 @@
 # claudlobby
 
-A multi-bot Claude Code fleet running on a Raspberry Pi 5. Always-on AI assistants connected via Telegram, each with specialized roles, isolated contexts, and shared infrastructure.
+A multi-bot Claude Code fleet running on a single always-on Linux or macOS host (originally designed on a Raspberry Pi 5 — see [`docs/pi-setup-guide.md`](docs/pi-setup-guide.md) — and portable to Mac mini and other hosts). Always-on AI assistants connected via Telegram, each with specialized roles, isolated contexts, and shared infrastructure.
 
 ## What This Is
 
-A system for running multiple Claude Code instances as persistent bots on a single Raspberry Pi, each with:
+A system for running multiple Claude Code instances as persistent bots on a single always-on host, each with:
 - Its own **Telegram bot** for communication
 - Its own **MCP servers** (GitHub, Notion, Gmail, Shopify, etc.)
 - Its own **persona and skills** defined in CLAUDE.md
@@ -12,11 +12,28 @@ A system for running multiple Claude Code instances as persistent bots on a sing
 
 The bots operate in Telegram group chats where some listen to everything (`requireMention: false`) and others only respond when @mentioned (`requireMention: true`). This creates a natural hierarchy — a manager bot that converses freely and worker bots that activate on demand.
 
+## What This Repo Includes — And Doesn't
+
+**Included:**
+- `bot-common/` — OS-agnostic lifecycle scripts, fleet-state tracking, Telegram helpers, bootstrap tooling
+- `manager/` — canonical manager scaffold with 11 orchestration skills pre-installed
+- `examples/worker/` — worker template with full Lifecycle / Context / Comms patterns
+- `examples/global-skills/` — skills that need to land in `~/.claude/skills/` globally (`mission`, `autonomous-sprint`)
+- `docs/first-run-bootstrap.md` — the zero-to-ripping walkthrough
+
+**You install separately** (these are the big gaps people hit on a fresh clone):
+- **Claudefather or equivalent** (`<your-claudefather-repo>`) — the global library of ~50 skills (`/simplify`, `/review-pr`, `/review-changes`, `/tech-debt`, `/session-handoff`, `/worktree`, `/development-retro`, etc.), 8 agents, and 4 hooks. **This is the single biggest reason a fleet "rips"** — without it, your bots are missing most of their muscle. Install via `./install.sh` inside the cloned repo.
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the CLI itself + OAuth login (or `ANTHROPIC_API_KEY`).
+- **[Telegram channel plugin](https://github.com/anthropics/claude-plugins-official)** — `claude plugin install telegram@claude-plugins-official`.
+- **Your secrets** — GitHub PAT, Notion token, Slack token, BotFather tokens (one per bot).
+
+👉 **See [docs/first-run-bootstrap.md](docs/first-run-bootstrap.md) for the full sequence.**
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  Raspberry Pi 5 (16GB)              │
+│            Always-on host (Pi 5 / Mac mini / …)      │
 │                                                     │
 │  ~/claudlobby/                                        │
 │  ├── bot-common/          Shared start/keepalive    │
@@ -72,116 +89,77 @@ tmux send-keys -t work-eng-bot 'Fix the failing test in src/api/auth.ts and crea
 
 ## Quick Start
 
-### Prerequisites
+The full walkthrough lives at **[docs/first-run-bootstrap.md](docs/first-run-bootstrap.md)**.
 
-- Raspberry Pi 5 (16GB recommended, 8GB minimum for 2 bots)
-- Debian Bookworm (standard Pi OS)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- Telegram account + bots created via [@BotFather](https://t.me/BotFather)
-
-### 1. Clone and Set Up
+Condensed flow:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claudlobby.git ~/claudlobby
-cd ~/claudlobby
+# 1. Prereqs
+brew install bun uv tmux jq gh            # macOS; see bootstrap doc for Linux
+npm install -g @anthropic-ai/claude-code
+claude /login
+
+# 2. Clone + claudefather + plugin
+git clone https://github.com/chrisrogers37/claudlobby.git ~/claudlobby
+git clone <your-claudefather-repo> /tmp/claudefather && (cd /tmp/claudefather && ./install.sh)
+claude plugin marketplace add anthropics/claude-plugins-official
+claude plugin install telegram@claude-plugins-official
+
+# 3. Optional global skills (needed for /autonomous-sprint)
+cp -r ~/claudlobby/examples/global-skills/mission ~/.claude/skills/
+cp -r ~/claudlobby/examples/global-skills/autonomous-sprint ~/.claude/skills/
+
+# 4. Bootstrap your manager + workers
+~/claudlobby/bot-common/bootstrap-bot.sh mgr manager   --telegram-token <...> --group-chat-id <...>
+~/claudlobby/bot-common/bootstrap-bot.sh eng-a worker  --telegram-token <...> --group-chat-id <...>
+~/claudlobby/bot-common/bootstrap-bot.sh rev-a worker  --telegram-token <...> --group-chat-id <...>
+
+# 5. Fill in CLAUDE.md + .mcp.json + service unit + pair each bot → you're live.
 ```
 
-### 2. Create Your First Bot
-
-```bash
-# Create bot directory
-mkdir -p ~/claudlobby/my-bot/{planning,.claude/skills}
-
-# Copy and customize the config
-cp examples/bot.conf ~/claudlobby/my-bot/bot.conf
-# Edit bot.conf with your bot name, paths, Telegram state dir
-
-# Write your CLAUDE.md (persona + instructions)
-cp examples/CLAUDE.md ~/claudlobby/my-bot/CLAUDE.md
-# Customize the persona, skills, MCP servers, behavior rules
-
-# Create .mcp.json with your MCP servers
-cp examples/.mcp.json ~/claudlobby/my-bot/.mcp.json
-# Add your API tokens (this file is gitignored)
-```
-
-### 3. Set Up Telegram
-
-```bash
-# 1. Create bot via @BotFather, get token
-# 2. Disable Group Privacy: /setprivacy → Disable
-# 3. Create group chat, add bot, make admin
-# 4. Get group ID via @raw_data_bot
-
-# Create Telegram state directory
-mkdir -p ~/.claude/channels/telegram-my-bot/{approved,inbox}
-
-# Write bot token
-echo "TELEGRAM_BOT_TOKEN=your_token_here" > ~/.claude/channels/telegram-my-bot/.env
-chmod 600 ~/.claude/channels/telegram-my-bot/.env
-
-# Write access config
-cat > ~/.claude/channels/telegram-my-bot/access.json << 'EOF'
-{
-  "dmPolicy": "allowlist",
-  "allowFrom": ["YOUR_TELEGRAM_USER_ID"],
-  "groups": {
-    "YOUR_GROUP_CHAT_ID": {
-      "requireMention": false,
-      "allowFrom": []
-    }
-  },
-  "pending": {}
-}
-EOF
-```
-
-### 4. Install Systemd Service
-
-```bash
-sudo cp examples/bot.service /etc/systemd/system/my-bot.service
-# Edit the service file: update paths, bot name
-sudo systemctl daemon-reload
-sudo systemctl enable my-bot
-sudo systemctl start my-bot
-```
-
-### 5. Set Up Keepalive Cron
-
-```bash
-# Add to crontab (crontab -e)
-*/30 * * * * /home/YOUR_USER/claudlobby/bot-common/keepalive.sh /home/YOUR_USER/claudlobby/my-bot
-```
 
 ## Directory Structure
 
 ```
 claudlobby/
-├── bot-common/                    # Shared infrastructure
-│   ├── start-bot.sh               # Parameterized bot launcher
-│   ├── keepalive.sh               # Health check + auto-restart
-│   └── report-back.sh             # Inter-bot communication
+├── bot-common/                   # Shared lifecycle + helpers (OS-agnostic)
+│   ├── start-bot.sh              # tmux + claude launcher (called by service unit)
+│   ├── keepalive.sh              # Dead-session restart + idle nudge
+│   ├── report-back.sh            # Worker → manager tmux reports (+ fleet-state update)
+│   ├── tg-post.sh                # Bash → Telegram API w/ parse_mode=Markdown
+│   ├── fleet-state.json          # Central "who's doing what" ledger
+│   ├── fleet-state-update.sh     # Updater (called by start-bot + report-back)
+│   ├── sprint-trigger.sh         # Schedule-driven /autonomous-sprint nudger
+│   └── bootstrap-bot.sh          # One-shot per-bot scaffolder
 │
-├── examples/                      # Templates for new bots
-│   ├── bot.conf                   # Bot configuration template
-│   ├── CLAUDE.md                  # Persona/instructions template
-│   ├── .mcp.json                  # MCP server config template
-│   ├── bot.service                # Systemd service template
-│   ├── access.json                # Telegram access template
-│   └── settings.local.json        # Claude permissions template
+├── manager/                      # Canonical manager scaffold
+│   ├── bot.conf                  # Template w/ <PLACEHOLDERS>
+│   ├── CLAUDE.md                 # Generic manager persona + orchestration rules
+│   ├── .mcp.json.template        # GitHub + Notion + Slack stubs
+│   └── .claude/
+│       ├── settings.local.json
+│       └── skills/               # 11 orchestration skills
+│           ├── dispatch/ fleet-status/ lifecycle/
+│           ├── autonomous-sprint/ data-alert-sweep/ deploy-status/ prs/
+│           ├── restart/ sweep/ status/
+│           └── _telegram-formatting.md
 │
-├── my-bot/                        # Each bot follows this structure
-│   ├── CLAUDE.md                  # Persona + capabilities
-│   ├── bot.conf                   # Bot-specific config
-│   ├── .mcp.json                  # MCP servers (gitignored)
-│   ├── .env                       # Secrets (gitignored)
-│   ├── .claude/
-│   │   ├── settings.local.json    # Permissions
-│   │   └── skills/                # Bot-specific skills
-│   └── planning/                  # Multi-session plans
+├── examples/
+│   ├── worker/                   # Worker template (role-agnostic)
+│   ├── global-skills/            # Install to ~/.claude/skills/ — mission, autonomous-sprint
+│   ├── optional-personal-skills/ # Personal-assistant examples: briefing, triage
+│   ├── optional-personal-scripts/  # evening-audit, finance-presync
+│   ├── scripts/                  # Generic ops scripts
+│   ├── access.json               # Telegram access template
+│   └── bot.service               # Systemd unit template
 │
-└── another-bot/                   # Add as many bots as you need
-    └── (same structure)
+└── docs/
+    ├── first-run-bootstrap.md    # The zero-to-ripping walkthrough
+    ├── pi-setup-guide.md
+    ├── integrations.md
+    ├── notion-integration.md
+    ├── advanced-patterns.md
+    └── bot-archetypes.md
 ```
 
 ## Key Concepts
@@ -191,7 +169,7 @@ claudlobby/
 Each bot can have a unique name and personality. The directory name is the technical identifier — the persona lives in CLAUDE.md and the Telegram display name:
 
 - **Directory:** `~/claudlobby/my-bot/` (technical, used by systemd/tmux/crons)
-- **CLAUDE.md:** "You are Rajan, a meticulous code reviewer who..." (how the bot sees itself)
+- **CLAUDE.md:** "You are Sage, a meticulous code reviewer who..." (how the bot sees itself — pick any persona)
 - **Telegram @BotFather:** Set the display name and username (how everyone else sees it)
 
 Give bots distinct personalities — a sarcastic engineer, a methodical reviewer, a high-energy business rep. The persona in CLAUDE.md shapes every interaction. Bots with strong personalities are more memorable and easier to work with in group chats.
@@ -303,7 +281,7 @@ tmux send-keys -t code-reviewer-bot 'Review PR #42 at https://github.com/org/rep
 
 ## Resource Planning
 
-Per-bot resource cost on Pi 5:
+Per-bot resource cost (Pi 5 reference — similar on Mac mini / small Linux hosts):
 
 | Component | RAM |
 |-----------|-----|
@@ -311,7 +289,7 @@ Per-bot resource cost on Pi 5:
 | MCP servers (varies) | ~200-500 MB |
 | **Total per bot** | **~800 MB - 1.1 GB** |
 
-| Fleet Size | Estimated RAM | Pi 5 (16GB) |
+| Fleet Size | Estimated RAM | 16 GB host |
 |-----------|---------------|-------------|
 | 2 bots | ~2-3 GB | Comfortable |
 | 3-4 bots | ~4-5 GB | Good |
@@ -371,7 +349,7 @@ For critical interactions, use **Remote Control** (`--remote-control` flag, incl
 
 ### Global Skills Layer
 
-Bot-specific skills live in each bot's directory. General-purpose development skills (code review, worktrees, security audits, deployment tools) are shared globally via [claudefather](https://github.com/Artemis-xyz/claudefather) — a global Claude Code configuration repo that manages skills, hooks, and agents installed to `~/.claude/`. See the [bot archetypes doc](docs/bot-archetypes.md) for which skills each bot type needs.
+Bot-specific skills live in each bot's directory. General-purpose development skills (code review, worktrees, security audits, deployment tools) are shared globally via your claudefather-equivalent repo — a global Claude Code configuration repo that manages skills, hooks, and agents installed to `~/.claude/`. See the [bot archetypes doc](docs/bot-archetypes.md) for which skills each bot type needs.
 
 ## Example Configurations
 

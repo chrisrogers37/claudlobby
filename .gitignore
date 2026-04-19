@@ -7,8 +7,12 @@
 # OAuth credentials
 .google_workspace_mcp/
 
-# Claude config (auth tokens, plugin cache, channel state)
+# Claude Code state (auth, channels, sessions) — but allow template dirs
 .claude/
+!manager/.claude/
+!manager/.claude/**
+!examples/worker/.claude/
+!examples/worker/.claude/**
 
 # Node modules
 node_modules/

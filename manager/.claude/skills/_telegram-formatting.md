@@ -1,6 +1,6 @@
 # Telegram Formatting Reference
 
-Shared formatting guide for all skills that send output to Telegram (chat_id: 7668871620).
+Shared formatting guide for all skills that send output to Telegram (chat_id: `$TELEGRAM_GROUP_CHAT_ID`, exported from `bot.conf`).
 
 ## Always use MarkdownV2
 
@@ -13,7 +13,7 @@ MarkdownV2 requires escaping these characters with `\`:
 _ * [ ] ( ) ~ ` > # + - = | { } . !
 ```
 
-Every special character in the message **must** be escaped, including dollar signs, periods, parentheses, hyphens, plus signs, tilde (`~`), etc. Missing an escape causes silent failure. **Common gotcha:** `~` is strikethrough in MarkdownV2 — always escape it as `\~` (e.g., `\~/assistant/` not `~/assistant/`).
+Every special character in the message **must** be escaped, including dollar signs, periods, parentheses, hyphens, plus signs, tilde (`~`), etc. Missing an escape causes silent failure. **Common gotcha:** `~` is strikethrough in MarkdownV2 — always escape it as `\~` (e.g., `\~/path/to/file` not `~/path/to/file`).
 
 ## Structure
 

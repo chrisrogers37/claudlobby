@@ -13,7 +13,7 @@ The zero-to-ripping walkthrough. Assumes you've cloned this repo and want to get
 - `docs/` — setup guide (Pi), integrations, advanced patterns
 
 **You install separately:**
-- [Claudefather](https://github.com/Artemis-xyz/claudefather) or equivalent — the global skills (~50) + agents + hooks that land in `~/.claude/`. This is the single biggest unlock for why the fleet "rips" — skills like `/simplify`, `/review-pr`, `/review-changes`, `/tech-debt`, `/session-handoff`, `/worktree`, `/development-retro` come from here.
+- Claudefather or equivalent (`<your-claudefather-repo>`) — the global skills (~50) + agents + hooks that land in `~/.claude/`. This is the single biggest unlock for why the fleet "rips" — skills like `/simplify`, `/review-pr`, `/review-changes`, `/tech-debt`, `/session-handoff`, `/worktree`, `/development-retro` come from here.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — the CLI itself.
 - [Telegram channel plugin](https://github.com/anthropics/claude-plugins-official) — `claude plugin install telegram@claude-plugins-official`.
 - Your API tokens (GitHub, Notion, Slack, etc).

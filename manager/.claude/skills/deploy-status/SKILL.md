@@ -1,62 +1,58 @@
 ---
 name: deploy-status
-description: "Use when the user wants to check deployment health across Vercel, Railway, and DigitalOcean. Shows service status, recent deploys, and failures."
-argument-hint: "[vercel|railway|all] [project-name]"
+description: "Check deployment health across Vercel, Railway, DigitalOcean, and Neon. Shows service status, recent deploys, and failures."
+argument-hint: "[vercel|railway|digitalocean|neon|all] [<project-name>]"
 ---
 
 # Deploy Status
 
-Unified deployment health across all platforms.
+Unified deployment health across all platforms you deploy to. Populate the project lists below with your own services before installing.
 
 ## Platforms & Projects
 
 ### Vercel
-Use `vercel` CLI (in `~/.npm-global/bin/`). Always `export PATH="$HOME/.npm-global/bin:$PATH"` first.
+Use the `vercel` CLI. Ensure it's on PATH (via Homebrew, npm global, or similar).
 
-Projects (<FLEET_ORG> only): foxxed, huntress, artemis-invest-frontend, artemis-stablecoins-v2
+Projects under `<FLEET_ORG>`: `<VERCEL_PROJECTS>` *(e.g., `<api-backend>, <data-dashboard>, <frontend-app>, <secondary-frontend>`)*
 
 ```bash
-export PATH="$HOME/.npm-global/bin:$PATH"
 vercel ls --token=$VERCEL_TOKEN 2>&1 | head -30
 ```
 
-For specific project:
+For a specific project:
 ```bash
-export PATH="$HOME/.npm-global/bin:$PATH"
 vercel ls <project-name> --token=$VERCEL_TOKEN 2>&1 | head -20
 ```
 
 ### Railway
-Two tokens in `~/.env` — query both via GraphQL API (`me.workspaces.projects`, NOT `me.projects`):
+Query via the GraphQL API (`me.workspaces.projects`, NOT `me.projects`). You may have one or multiple tokens for different workspaces.
 
-**Work** (`RAILWAY_API_TOKEN` — Artemis Analytics):
+**Workspace token(s) in `~/claudlobby/.env.shared` or `~/.env`:**
 ```bash
-source ~/.env
+source ~/claudlobby/.env.shared   # or wherever you keep secrets
 curl -s -X POST https://backboard.railway.com/graphql/v2 \
   -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "{ me { workspaces { id name projects { edges { node { id name services { edges { node { id name } } } } } } } } }"}' | python3 -m json.tool
 ```
 
-Known work projects & services:
-- Artemis Stablecoin Dashboard: artemis-stablecoins-v2, Postgres, Redis
-- huntress: huntress + 6 sync services
-- foxxed: foxxed-pipeline, foxxed-api, foxxed-s3sync
-- artemis-data-svc: Redis, artemis-data-svc
-- heimdall-bot, vault-trade-execution, aletheia-backend, artemis-comp-explorer, wholesome-presence
+*(Populate the projects list below with your own Railway services once you've wired them up.)*
+
+Known projects & services under `<FLEET_ORG>`:
+- `<project-a>`: service list
+- `<project-b>`: service list
 
 ### DigitalOcean
-Use `doctl` CLI (team: wickedmuse).
+Use the `doctl` CLI (team: `<DO_TEAM>`).
 
 ```bash
-export PATH="$HOME/.npm-global/bin:$PATH"
 doctl apps list --format ID,Spec.Name,ActiveDeployment.Phase,UpdatedAt 2>&1
 ```
 
 ### Neon (Databases)
 ```bash
-export PATH="$HOME/.npm-global/bin:$PATH"
-neonctl projects list --org-id <NEON_ORG_ID> --output json 2>&1 | python3 -c "import sys,json; [print(f\"{p['name']}: {p['current_state']}\") for p in json.load(sys.stdin)]"
+neonctl projects list --org-id <NEON_ORG_ID> --output json 2>&1 \
+  | python3 -c "import sys,json; [print(f\"{p['name']}: {p['current_state']}\") for p in json.load(sys.stdin)]"
 ```
 
 
@@ -72,54 +68,51 @@ Check all platforms in parallel:
 
 ### 2. Platform-specific
 
-When user says "/deploy-status vercel" — only check Vercel.
+When the user says `/deploy-status vercel` — only check Vercel.
 
 ### 3. Project-specific
 
-When user says "/deploy-status huntress" — find it across platforms and show details.
+When the user says `/deploy-status <project>` — find it across platforms and show details.
 
 ## Output Formatting
 
-See [\_telegram\-formatting\.md](../_telegram-formatting.md) for Telegram output formatting rules\.
+See [_telegram-formatting.md](../_telegram-formatting.md) for Telegram output formatting rules.
 
-Send via `mcp__plugin_telegram_telegram__reply` to chat\_id `7668871620` with `format: "markdownv2"`\.
+Send via `mcp__plugin_telegram_telegram__reply` to chat_id `$TELEGRAM_GROUP_CHAT_ID` with `format: "markdownv2"`.
 
 ```
 🚀 *DEPLOY STATUS*
 
 *Vercel*
 ━━━━━━━━━━━━
-✅ huntress — deployed 2h ago
-✅ foxxed — deployed 4h ago
+✅ <project-a> — deployed 2h ago
+✅ <project-b> — deployed 4h ago
 
-*Railway — Artemis Analytics*
+*Railway*
 ━━━━━━━━━━━━
-✅ huntress \(7 services\) — 29m ago
-✅ foxxed — pipeline \+ api 12h ago
-💤 artemis\-data\-svc — sleeping
-
-*Railway — Personal*
-━━━━━━━━━━━━
-✅ storyline\-ai — 4d ago
+✅ <project-a> \(N services\) — 29m ago
+✅ <project-b> — pipeline \+ api 12h ago
+💤 <project-c> — sleeping
 
 *DigitalOcean*
 ━━━━━━━━━━━━
+✅ <app-a> — active
 
 🗄️ *Neon*
 ━━━━━━━━━━━━
-✅ All 6 databases healthy
+✅ All N databases healthy
 
 ⚠️ *Issues*
 ━━━━━━━━━━━━
-• wholesome\-presence has no deployment
+• <service> has no deployment
 ```
 
 ## Instructions
 
-1. Run all platform checks in parallel (both Railway tokens in parallel)
+1. Run all platform checks in parallel (multiple Railway tokens in parallel if applicable)
 2. Highlight failures, errors, or unhealthy services at the top
 3. Show last deploy time for each service
-4. Group Railway results by workspace (Artemis Analytics / Personal)
+4. Group Railway results by workspace if you use multiple
 5. Skip platforms with no projects if checking all
 6. For Railway, handle token auth issues gracefully — note which workspace needs re-auth
 

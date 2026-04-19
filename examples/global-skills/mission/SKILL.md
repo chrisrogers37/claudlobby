@@ -91,7 +91,7 @@ Write `PROJECT_MISSION.md` to the repo root:
 - Performance improvements
 
 ## Requires approval
-[What needs Chris's sign-off]
+[What needs the user's sign-off]
 - New integrations with external services
 - Breaking API changes
 - Features that change the user-facing workflow

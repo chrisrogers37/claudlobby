@@ -6,12 +6,12 @@ argument-hint: "<repo> [--max-issues N] [--dry-run] [--focus <area>]"
 
 # Autonomous Sprint — Mission-Driven Development Cycle
 
-The conductor skill. Reads a project's north star, evaluates the current backlog, identifies the highest-impact work, and dispatches the fleet to build it — all with Telegram visibility for Chris.
+The conductor skill. Reads a project's north star, evaluates the current backlog, identifies the highest-impact work, and dispatches the fleet to build it — all with Telegram visibility for the user.
 
 ## Arguments
 
 Parse `$ARGUMENTS`:
-- First word: repo name (required — e.g., `huntress`, `dbt`, `foxxed`)
+- First word: repo name (required — e.g., `<repo-a>`, `<repo-b>`, `<repo-c>`)
 - `--max-issues N`: cap on issues to work in this sprint (default: 3)
 - `--dry-run`: plan the sprint but don't dispatch — just show what would be worked
 - `--focus <area>`: constrain to a focus area (e.g., `frontend`, `api`, `reliability`)
@@ -19,8 +19,8 @@ Parse `$ARGUMENTS`:
 ## Prerequisites
 
 - The repo must have a `PROJECT_MISSION.md` (run `/mission --bootstrap` first if missing)
-- At least one engineer bot must be available (<engineer-1> for personal, <data-engineer> for work)
-- <reviewer-1> must be available for reviews
+- At least one engineer bot must be available
+- A reviewer bot must be available for reviews
 
 ## Procedure
 
@@ -71,7 +71,7 @@ Score each issue against the mission:
 
 Select top N issues (default 3, configurable via `--max-issues`).
 
-Verify each selected issue is "in bounds" per the mission doc. If any require approval, flag to Chris and exclude from auto-dispatch.
+Verify each selected issue is "in bounds" per the mission doc. If any require approval, flag the user and exclude from auto-dispatch.
 
 **Step 5: Determine execution order**
 
@@ -92,7 +92,7 @@ Selected issues (in order):
 2. #N — [title] (1-hop, quick win)
 3. #N — [title] (2-hop, mission-critical)
 
-Estimated: [N] issues, [engineer bot] implementing, <reviewer-1> reviewing.
+Estimated: [N] issues, [engineer bot] implementing, [reviewer bot] reviewing.
 ```
 
 If `--dry-run`, stop here.
@@ -107,11 +107,11 @@ For each issue, sequentially:
    - Include issue URL, repo, and relevant context from the mission doc
    - Engineer: acknowledge → branch → implement → test → /simplify → PR → report back
 
-2. **On engineer completion**: immediately dispatch <reviewer-1> for review
+2. **On engineer completion**: immediately dispatch a reviewer
    - If approved: verify CI green → merge → post to Telegram
    - If changes requested: classify mechanical vs ambiguous
      - Mechanical: auto-dispatch back to engineer (max 3 cycles)
-     - Ambiguous: flag to Chris, pause this issue, move to next
+     - Ambiguous: flag the user, pause this issue, move to next
 
 3. **After merge**: engineer runs `/compact` before next issue
 
@@ -144,37 +144,38 @@ Next sprint candidates:
 
 **Step 9: Post-sprint retro (optional)**
 
-If any issues were merged, dispatch engineer to run `/development-retro` on the combined work. Create follow-up issues from findings.
+If any issues were merged, dispatch an engineer to run `/development-retro` on the combined work. Create follow-up issues from findings.
 
 ## Bot Selection
 
-Map repo to engineer bot:
-- Personal repos () → <engineer-1> (<engineer-1>)
-- Work repos (dbt, gokustats-back-end, narrative, artemis-python-tools, huntress, foxxed) → <data-engineer> (<data-engineer>)
+Map repo to engineer bot based on your Dispatch Routing rules (see manager `CLAUDE.md`). A typical shape:
 
-Reviewer is always <reviewer-1> (<reviewer-1>).
+- `<FLEET_ORG>` work repos (`<FLEET_REPOS>`) → `<primary-engineer>` (or `<data-engineer>` for data-heavy repos)
+- Personal / side-project repos (`<PERSONAL_REPOS>`) → `<personal-engineer>` *(if your fleet has one; otherwise skip)*
 
-For work repos (Artemis): PRs are created but NOT auto-merged — they queue for team review. Sprint summary notes this.
+Reviewer is whichever reviewer bot is idle and least-context-saturated.
+
+**Safe-merge boundary**: shared / production repos where the fleet doesn't own the merge decision (e.g., `<FLEET_REPOS>` items with team review required) should have PRs created but NOT auto-merged. The sprint summary should note these as queued for human review.
 
 ## Safety
 
 - **Never work issues marked "requires approval"** in the mission doc
-- **Never merge to shared repos** (dbt, claudefather) — create PRs only
+- **Never merge to shared repos** (configure your fleet's exclusion list) — create PRs only
 - **Always verify CI green** before any merge
-- **Max 3 review cycles** per issue — flag to Chris after that
+- **Max 3 review cycles** per issue — flag the user after that
 - **Respect context limits** — restart bots proactively
-- **Emit everything to Telegram** — Chris sees every dispatch, every merge, every decision
+- **Emit everything to Telegram** — the user sees every dispatch, every merge, every decision
 
 ## Scheduling
 
 This skill can be triggered:
-- Manually: `/autonomous-sprint huntress --max-issues 5`
-- Via cron: add to briefing-cron.sh or a dedicated sprint cron
-- By the assistant: when fleet is idle and there's mission-aligned work to do
+- Manually: `/autonomous-sprint <repo> --max-issues 5`
+- Via cron / launchd: see `bot-common/sprint-trigger.sh`
+- By the manager: when the fleet is idle and there's mission-aligned work to do
 
 ## Notes
 
 - This skill orchestrates, it doesn't implement. All work is done by the fleet bots.
 - The mission doc is the constitution. If it says "reliability over features," a high-impact feature loses to a reliability fix.
 - Start with small sprints (2-3 issues). Scale up as confidence in the loop grows.
-- The sprint plan is posted BEFORE execution starts — Chris can cancel or adjust.
+- The sprint plan is posted BEFORE execution starts — the user can cancel or adjust.

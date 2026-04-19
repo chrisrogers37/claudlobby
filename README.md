@@ -1,10 +1,10 @@
 # claudlobby
 
-A multi-bot Claude Code fleet running on a Raspberry Pi 5. Always-on AI assistants connected via Telegram, each with specialized roles, isolated contexts, and shared infrastructure.
+A multi-bot Claude Code fleet running on a single always-on Linux or macOS host (originally designed on a Raspberry Pi 5 — see [`docs/pi-setup-guide.md`](docs/pi-setup-guide.md) — and portable to Mac mini and other hosts). Always-on AI assistants connected via Telegram, each with specialized roles, isolated contexts, and shared infrastructure.
 
 ## What This Is
 
-A system for running multiple Claude Code instances as persistent bots on a single Raspberry Pi, each with:
+A system for running multiple Claude Code instances as persistent bots on a single always-on host, each with:
 - Its own **Telegram bot** for communication
 - Its own **MCP servers** (GitHub, Notion, Gmail, Shopify, etc.)
 - Its own **persona and skills** defined in CLAUDE.md
@@ -22,7 +22,7 @@ The bots operate in Telegram group chats where some listen to everything (`requi
 - `docs/first-run-bootstrap.md` — the zero-to-ripping walkthrough
 
 **You install separately** (these are the big gaps people hit on a fresh clone):
-- **[Claudefather](https://github.com/Artemis-xyz/claudefather) or equivalent** — the global library of ~50 skills (`/simplify`, `/review-pr`, `/review-changes`, `/tech-debt`, `/session-handoff`, `/worktree`, `/development-retro`, etc.), 8 agents, and 4 hooks. **This is the single biggest reason a fleet "rips"** — without it, your bots are missing most of their muscle. Install via `./install.sh` inside the cloned repo.
+- **Claudefather or equivalent** (`<your-claudefather-repo>`) — the global library of ~50 skills (`/simplify`, `/review-pr`, `/review-changes`, `/tech-debt`, `/session-handoff`, `/worktree`, `/development-retro`, etc.), 8 agents, and 4 hooks. **This is the single biggest reason a fleet "rips"** — without it, your bots are missing most of their muscle. Install via `./install.sh` inside the cloned repo.
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the CLI itself + OAuth login (or `ANTHROPIC_API_KEY`).
 - **[Telegram channel plugin](https://github.com/anthropics/claude-plugins-official)** — `claude plugin install telegram@claude-plugins-official`.
 - **Your secrets** — GitHub PAT, Notion token, Slack token, BotFather tokens (one per bot).
@@ -33,7 +33,7 @@ The bots operate in Telegram group chats where some listen to everything (`requi
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  Raspberry Pi 5 (16GB)              │
+│            Always-on host (Pi 5 / Mac mini / …)      │
 │                                                     │
 │  ~/claudlobby/                                        │
 │  ├── bot-common/          Shared start/keepalive    │
@@ -169,7 +169,7 @@ claudlobby/
 Each bot can have a unique name and personality. The directory name is the technical identifier — the persona lives in CLAUDE.md and the Telegram display name:
 
 - **Directory:** `~/claudlobby/my-bot/` (technical, used by systemd/tmux/crons)
-- **CLAUDE.md:** "You are Rajan, a meticulous code reviewer who..." (how the bot sees itself)
+- **CLAUDE.md:** "You are Sage, a meticulous code reviewer who..." (how the bot sees itself — pick any persona)
 - **Telegram @BotFather:** Set the display name and username (how everyone else sees it)
 
 Give bots distinct personalities — a sarcastic engineer, a methodical reviewer, a high-energy business rep. The persona in CLAUDE.md shapes every interaction. Bots with strong personalities are more memorable and easier to work with in group chats.
@@ -281,7 +281,7 @@ tmux send-keys -t code-reviewer-bot 'Review PR #42 at https://github.com/org/rep
 
 ## Resource Planning
 
-Per-bot resource cost on Pi 5:
+Per-bot resource cost (Pi 5 reference — similar on Mac mini / small Linux hosts):
 
 | Component | RAM |
 |-----------|-----|
@@ -289,7 +289,7 @@ Per-bot resource cost on Pi 5:
 | MCP servers (varies) | ~200-500 MB |
 | **Total per bot** | **~800 MB - 1.1 GB** |
 
-| Fleet Size | Estimated RAM | Pi 5 (16GB) |
+| Fleet Size | Estimated RAM | 16 GB host |
 |-----------|---------------|-------------|
 | 2 bots | ~2-3 GB | Comfortable |
 | 3-4 bots | ~4-5 GB | Good |
@@ -349,7 +349,7 @@ For critical interactions, use **Remote Control** (`--remote-control` flag, incl
 
 ### Global Skills Layer
 
-Bot-specific skills live in each bot's directory. General-purpose development skills (code review, worktrees, security audits, deployment tools) are shared globally via [claudefather](https://github.com/Artemis-xyz/claudefather) — a global Claude Code configuration repo that manages skills, hooks, and agents installed to `~/.claude/`. See the [bot archetypes doc](docs/bot-archetypes.md) for which skills each bot type needs.
+Bot-specific skills live in each bot's directory. General-purpose development skills (code review, worktrees, security audits, deployment tools) are shared globally via your claudefather-equivalent repo — a global Claude Code configuration repo that manages skills, hooks, and agents installed to `~/.claude/`. See the [bot archetypes doc](docs/bot-archetypes.md) for which skills each bot type needs.
 
 ## Example Configurations
 

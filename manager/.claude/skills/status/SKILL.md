@@ -1,13 +1,13 @@
 ---
 name: status
-description: "Use when the user asks if the assistant is healthy, or to diagnose connectivity, cron jobs, MCP servers, or session issues. Self-diagnostic tool."
-argument-hint: "[full|mcp|cron|telegram]"
+description: "Manager self-diagnostic. Reports session health, MCP connectivity, tmux fleet state, and fleet-state ledger. Generic — no host-specific or personal paths."
+argument-hint: "[full|mcp|telegram]"
 ---
 
 
 # Status
 
-Self-diagnostic for the always-on assistant. Checks session health, MCP connections, cron jobs, and Telegram connectivity.
+Self-diagnostic for the manager. Checks session health, MCP connections, fleet health, and Telegram connectivity. Use when asked "how are you doing" or when you want to surface any degradation.
 
 ## Checks
 
@@ -20,109 +20,82 @@ echo "Memory: $(ps -o rss= -p $(pgrep -f 'claude' | head -1) 2>/dev/null | awk '
 tmux list-sessions 2>/dev/null
 ```
 
+Also read your own context % from the status line (look for `N%` near the prompt).
+
 ### 2. MCP Server Connectivity
 
-Test each MCP server by making a lightweight call:
+Test each server configured in `.mcp.json` with a lightweight read-only call. Run in parallel.
 
 | Server | Test |
 |--------|------|
+| GitHub | `mcp__github__get_me` |
 | Notion | `mcp__notion__API-get-self` |
-| Gmail | `mcp__claude_ai_Gmail__gmail_get_profile` |
-| Google Calendar | `mcp__claude_ai_Google_Calendar__gcal_list_calendars` |
-| GitHub | `mcp__github__search_repositories` with a simple query |
-| Home Assistant | `mcp__homeassistant__get_version` |
-| Telegram | `mcp__plugin_telegram_telegram__react` is available (passive check) |
-| Docker | `mcp__docker__list_containers` |
+| Slack | `mcp__slack__auth_test` |
+| *(Add rows for any other MCP servers you have configured)* | |
+| Telegram plugin | passive — confirm `mcp__plugin_telegram_telegram__reply` is available |
 
-Run all tests in parallel. Report pass/fail for each.
+Report pass/fail per server.
 
-### 3. Cron Jobs
+### 3. Fleet Health
+
+List tmux sessions; compare against expected workers. For each worker, capture the last few pane lines so you can see if anyone is stuck or erroring.
 
 ```bash
-crontab -l 2>/dev/null
+tmux list-sessions
+for bot in <WORKER_LIST>; do
+  echo "=== $bot ==="
+  tmux capture-pane -t "$bot" -p 2>/dev/null | tail -3 || echo "  (dead)"
+done
 ```
 
-Check if crons are firing:
+Also consult the fleet-state ledger (if wired):
+
 ```bash
-echo "=== Briefing cron ===" && ls -la ~/assistant/briefing-cron.sh
-echo "=== Audit cron ===" && ls -la ~/assistant/evening-audit.sh
-echo "=== Last briefing log ===" && tail -5 /tmp/briefing-cron.log 2>/dev/null || echo "no log"
-echo "=== Last audit log ===" && cat ~/assistant/audit-results/cron.log 2>/dev/null || echo "no log"
+jq '.bots | to_entries | map({bot: .key, status: .value.status, task: .value.current_task})' \
+  ~/claudlobby/bot-common/fleet-state.json
 ```
 
-### 4. Finance Snapshots
+### 4. Telegram Connectivity
+
+Passive check — note the last message you received and any visible gaps in message IDs. Confirm the plugin is advertising itself in your session ("Listening for channel messages from: plugin:telegram").
+
+### 5. Disk & System (portable)
 
 ```bash
-echo "=== Portfolio snapshots (last 5) ===" && ls -la ~/assistant/finances/portfolio-snapshots/ | tail -5
-echo "=== Transaction snapshots (last 5) ===" && ls -la ~/assistant/finances/transaction-snapshots/ | tail -5
-```
-
-Check for gaps in daily snapshots.
-
-### 5. Telegram Connectivity
-
-Passive check — note the last message received and any gaps in message IDs. Check if the Telegram plugin tools are responding.
-
-### 6. Disk & System
-
-```bash
-df -h / | tail -1
-free -h | head -2
+df -h $HOME | tail -1
 uptime
-cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk '{printf "CPU temp: %.1f°C\n", $1/1000}'
 ```
 
-## Output Formatting
+*(Linux only — add `free -h | head -2` if you want memory. Linux hosts with thermal sensors can also add `cat /sys/class/thermal/thermal_zone0/temp`.)*
 
-See [\_telegram\-formatting\.md](../_telegram-formatting.md) for Telegram output formatting rules\.
+## Output
 
-Send via `mcp__plugin_telegram_telegram__reply` to chat\_id `7668871620` with `format: "markdownv2"`\.
+Send via `mcp__plugin_telegram_telegram__reply` to chat_id `$TELEGRAM_GROUP_CHAT_ID` with `parseMode: "Markdown"` (or `markdownv2` for richer formatting — see [_telegram-formatting.md](../_telegram-formatting.md)).
 
 ```
-🖥️ *ASSISTANT STATUS*
+🖥️ *MANAGER STATUS*
 
 *Session*
-━━━━━━━━━━━━
-• Running 4h 23m \| PID 12345 \| 487 MB RAM
-• Pi 5 \| 42\.3°C \| 12\.4 GB free \| load 0\.32
+• Running 4h 23m | PID 12345 | 487 MB | context 34%
 
 *MCP Servers*
-━━━━━━━━━━━━
-✅ Notion \| Gmail \| Calendar \| GitHub
-✅ Home Assistant \| Telegram \| Docker
+✅ GitHub | Notion | Slack
+❌ (any failing here)
 
-*Crons*
-━━━━━━━━━━━━
-✅ Briefings — last: today 6:30 PM
-✅ Evening audit — last: yesterday 9:00 PM
-✅ Portfolio snapshot — last: today 4:30 PM
-✅ Transaction snapshot — last: today 6:00 AM
-
-*Snapshots*
-━━━━━━━━━━━━
-✅ 30/30 days \(no gaps\)
+*Fleet*
+• 5 alive | 4 idle | 1 working | 0 blocked
 
 ⚠️ *Issues*
-━━━━━━━━━━━━
-• None
-```
-
-With problems:
-```
-⚠️ *Issues*
-━━━━━━━━━━━━
-• Telegram: message drops detected \(gap: msg 1175\-1177\)
-• Railway token: empty projects \(needs re\-auth\)
-❌ Portfolio snapshot: missing Apr 2\-3 \(session was down\)
+• (listed only if any)
 ```
 
 ## Instructions
 
-1. Run all checks in parallel for speed
-2. For MCP tests, use lightweight read-only calls — don't modify anything
-3. Flag any issues prominently at the top
-4. Include CPU temperature (Pi 5 throttles at 85°C)
-5. Check for snapshot gaps by comparing file dates against expected daily cadence
-6. Default to full status check if no argument specified
+1. Run all checks in parallel for speed.
+2. For MCP tests, use read-only calls — don't modify anything.
+3. Flag issues prominently at the top of the output.
+4. If your own context is > 70%, call it out — you should be restarted soon.
+5. Keep the output under ~20 lines. Don't dump full pane captures — only the single relevant line if you found an error.
+6. Default to "full" if no argument is provided.
 
 $ARGUMENTS

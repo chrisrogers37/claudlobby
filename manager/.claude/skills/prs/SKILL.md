@@ -1,12 +1,12 @@
 ---
 name: prs
 description: "Use when the user asks about pull requests, code reviews, or wants an overview of PR activity across repos. Shows authored PRs, review requests, and CI status."
-argument-hint: "[mine|review|repo-name] [--personal]"
+argument-hint: "[mine|review|<repo-name>] [--personal]"
 ---
 
 # PRs
 
-Unified pull request overview across all GitHub repos.
+Unified pull request overview across all GitHub repos you care about.
 
 ## Tools
 
@@ -21,24 +21,24 @@ Unified pull request overview across all GitHub repos.
 
 ## Repos to Check
 
-**Default: Work repos only (<FLEET_ORG> org):**
-dbt, huntress, foxxed, gokustats-back-end, milo, artemis-stablecoins-v2, artemis-python-tools, narrative
+**Default: Work repos only (`<FLEET_ORG>` org):**
+`<FLEET_REPOS>` *(populate with your repo list, e.g. `repo-a, repo-b, repo-c`)*
 
-**With `--personal` flag, also check (chrisrogers37):**
+**With `--personal` flag, also check (`<USER_GITHUB>`):**
+`<PERSONAL_REPOS>` *(populate with your personal repo list, or leave empty if the fleet only touches the org)*
 
-
-Only check personal repos when `--personal` is explicitly passed. This avoids GitHub API rate limits.
+Only check personal repos when `--personal` is explicitly passed. This avoids GitHub API rate limits and keeps the fleet focused on its scope.
 
 ## Operations
 
 ### 1. Overview (default)
 
-Check for PRs authored by `chrisrogers37` and PRs requesting review across all repos. Run repo checks in parallel using multiple tool calls.
+Check for PRs authored by `<USER_GITHUB>` and PRs requesting review across all repos. Run repo checks in parallel using multiple tool calls.
 
 For each repo, call:
 ```
 mcp__github__list_pull_requests
-owner: "<FLEET_ORG>" (or "chrisrogers37" for personal)
+owner: "<FLEET_ORG>" (or "<USER_GITHUB>" for personal)
 repo: "<repo-name>"
 state: "open"
 ```
@@ -59,26 +59,26 @@ Then categorize results:
 
 ### 2. My PRs
 
-Filter to only PRs authored by chrisrogers37:
+Filter to only PRs authored by `<USER_GITHUB>`:
 ```
 mcp__github__list_pull_requests
 owner: "<FLEET_ORG>"
 repo: "<repo>"
 state: "open"
 ```
-Then filter results where author is chrisrogers37.
+Then filter results where author is `<USER_GITHUB>`.
 
 ### 3. Review Requests
 
-PRs where review is requested from chrisrogers37.
+PRs where review is requested from `<USER_GITHUB>`.
 
 ### 4. Specific Repo
 
-When user says "/prs huntress" — check only that repo:
+When user says `/prs <repo>` — check only that repo:
 ```
 mcp__github__list_pull_requests
 owner: "<FLEET_ORG>"
-repo: "huntress"
+repo: "<repo>"
 state: "open"
 ```
 
@@ -100,17 +100,17 @@ When sending results via Telegram, use `format: "markdownv2"`. See [_telegram-fo
 PRS OVERVIEW
 
 Needs your action:
-- huntress #267 — changes requested by @reviewer
-- dbt #3592 — CI failing (test_enrichment)
-- foxxed #187 — review requested
+- <repo-a> #NNN — changes requested by @reviewer
+- <repo-b> #NNN — CI failing (test_name)
+- <repo-c> #NNN — review requested
 
 Waiting on others:
-- huntress #269 — awaiting review (opened 2h ago)
+- <repo-a> #NNN — awaiting review (opened 2h ago)
 
 Merged today:
-- huntress #266 — sqlparse fix (merged 4h ago)
+- <repo-a> #NNN — <title> (merged 4h ago)
 
-No open PRs: claudefather, milo, narrative, gokustats-back-end
+No open PRs: <list of quiet repos>
 ```
 
 ## Instructions
@@ -120,6 +120,6 @@ No open PRs: claudefather, milo, narrative, gokustats-back-end
 3. Skip repos with no open PRs — just list them at the bottom
 4. Always show CI status (passing/failing/pending) for open PRs
 5. Prioritize PRs needing action at the top
-6. When checking work repos, owner is "<FLEET_ORG>". For personal repos, owner is "chrisrogers37"
+6. When checking work repos, owner is `<FLEET_ORG>`. For personal repos, owner is `<USER_GITHUB>`
 
 $ARGUMENTS

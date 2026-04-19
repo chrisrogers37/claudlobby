@@ -1,152 +1,162 @@
 ---
 name: sweep
-description: "Nightly code sweep — picks the stalest repo, runs the right planning skill, creates GitHub issues, logs results. Triggered by cron or manually via /sweep."
-argument-hint: "[run|status]"
+description: "Periodic code-quality sweep across fleet repos. Picks the stalest repo, runs the appropriate audit skill via a subagent, records findings. Scheduled via cron or manually."
+argument-hint: "[<repo-name>] [--type tech-debt|security-audit|docs-review|data-model-audit] [run|status]"
 ---
 
 
 # Sweep
 
-Automated nightly code sweep that rotates through work repos. Picks the stalest area, runs the appropriate planning skill, creates GitHub issues, and logs everything for the morning briefing.
+A scheduled maintenance pass over the fleet's repos. Run on a cadence (e.g., weekly via cron) to keep repositories from accumulating silent rot.
 
-## How It Works
+## How it works
 
-The sweep orchestrates three existing skills based on the audit type:
+The sweep orchestrates claudefather planning skills. Pick a repo → pick an audit type → dispatch to a subagent so it doesn't pollute your main context.
 
-| Type from `rolling-audit.sh` | Skill to run | What it finds |
-|------------------------------|-------------|---------------|
-| `tech-debt` | `/tech-debt` | Dead code, god modules, deprecated patterns, missing abstractions |
-| `security` | `/security-audit` | Credential leaks, injection vectors, auth gaps, TLS issues |
-| `enhancement` | `/product-enhance` | UX gaps, missing features, performance issues, API inconsistencies |
+| Audit type | Skill to run | What it finds |
+|-----------|-------------|---------------|
+| tech-debt | `/tech-debt` | Dead code, god modules, deprecated patterns |
+| security | `/security-audit` | Credential leaks, injection vectors, auth gaps |
+| docs | `/docs-review` | Stale or missing documentation |
+| data-model | `/data-model-audit` | Schema / app mismatches (if applicable) |
+| enhancement | `/product-enhance` | UX gaps, missing features, inconsistencies |
 
-Each skill is run with `--auto --github-issues` flags so it operates non-interactively and creates GitHub issues directly.
+Each is run with `--auto --output github` so it operates non-interactively and creates GitHub issues directly.
 
 ## Operations
 
 ### 1. Run (default)
 
-Execute a full sweep cycle. This is what the 9pm cron triggers.
+A full sweep cycle. This is what a scheduled cron triggers.
 
 **Step 1: Pick target**
-```bash
-bash ~/assistant/rolling-audit.sh suggest
-```
-Outputs: REPO, DIR, TYPE, STALENESS (days), REPO_PATH. The script rotates through repos and directories, always picking the stalest area.
 
-**Step 2: Pull latest code**
-```bash
-cd <REPO_PATH> && git checkout main && git pull
-```
-Always sweep against the latest main branch.
+Select the stalest repo — either from a fleet-maintained tracker or by inspecting git recency:
 
-**Step 3: Launch the audit subagent**
+```bash
+# Option A: fleet-state ledger, if you maintain last_swept per repo
+jq -r '.sweeps | to_entries | sort_by(.value.last_swept) | .[0].key' \
+  ~/claudlobby/bot-common/fleet-state.json
+
+# Option B: pick the repo with the most days since last commit to main
+for repo in <FLEET_REPOS>; do
+  ts=$(git -C "<REPOS_ROOT>/$repo" log -1 --format=%ct main 2>/dev/null || echo 0)
+  echo "$ts $repo"
+done | sort -n | head -1 | cut -d' ' -f2
+```
+
+Override by passing a repo name as the first argument.
+
+**Step 2: Pick an audit type**
+
+Default rotation per repo (so every repo sees every audit over time):
+
+| Week | Audit |
+|------|-------|
+| 1 | `tech-debt` |
+| 2 | `security-audit` |
+| 3 | `docs-review` |
+| 4 | `data-model-audit` *(skip if not applicable)* |
+
+Override with `--type`.
+
+**Step 3: Pull latest code**
+
+```bash
+cd <REPOS_ROOT>/<repo> && git checkout main && git pull
+```
+
+Always sweep against the latest main.
+
+**Step 4: Launch the audit subagent**
 
 Spawn a **background** Agent (subagent_type: general-purpose) with this prompt structure:
 
 ```
-You are running an automated {TYPE} audit.
+You are running an automated <TYPE> audit on <REPO>.
 
-1. cd to {REPO_PATH}
-2. Run the /{SKILL} skill with --auto --github-issues flags, targeting the {DIR} directory
-3. Use: Skill tool with skill="{SKILL}" and args="--auto --github-issues {DIR}"
+1. cd to <REPOS_ROOT>/<REPO>
+2. Run the /<SKILL> skill with --auto --output github, scoped to the highest-impact directory
+3. Use: Skill tool with skill="<SKILL>" and args="--auto --output github <DIR>"
 
 After the skill completes, collect:
 - All GitHub issue URLs created
 - Key findings summary with severity levels
 - Positive notes (what's well-implemented)
 
-Return a structured summary with:
-- REPO: {REPO}
-- DIR: {DIR}
-- TYPE: {TYPE}
+Return a structured summary:
+- REPO: <REPO>
+- DIR: <DIR>
+- TYPE: <TYPE>
 - ISSUES: comma-separated list of issue URLs
-- FINDINGS: brief summary of key findings
+- FINDINGS: brief summary
 ```
 
 **IMPORTANT: The subagent needs full permissions.** It will:
-- Read many files across the repo (Glob, Grep, Read)
-- Search code patterns (Grep)
-- Create GitHub issues (mcp__github__create_issue)
-- Run the Skill tool
+- Read many files (Glob, Grep, Read)
+- Create GitHub issues (`mcp__github__create_issue`)
+- Invoke another skill via the Skill tool
 
-If the subagent can't create issues due to permissions, the sweep fails silently. Ensure GitHub MCP tools are in the allow list.
+If issue creation fails due to permissions, the sweep fails silently. Ensure GitHub MCP tools are in the allow list.
 
-**Step 4: Process results**
+**Step 5: Record the sweep**
 
-When the subagent completes, parse its output for REPO, DIR, TYPE, ISSUES, and FINDINGS.
+Update your sweep tracker (whatever you use — a JSON file, a Notion DB, a dedicated log):
 
-Log the audit:
-```bash
-python3 ~/assistant/audit-tracker.py log --repo {REPO} --directory {DIR} --type {TYPE} --issues {ISSUE_URLS}
-```
+- Repo swept
+- Audit type run
+- Timestamp
+- Issue URLs created
+- Count of findings
 
-**Step 5: Write summary**
+If you maintain per-repo `last_swept` in fleet-state.json, update it here.
 
-Overwrite `~/assistant/audit-results/latest.md` with:
-```markdown
-# Audit Results — {DATE} (Evening)
+**Step 6: Report**
 
-**Repo:** {REPO}
-**Directory:** {DIR}
-**Type:** {TYPE}
-**Issues Created:** {COUNT}
+Post a concise Telegram summary (`parseMode: "Markdown"`) with:
+- Repo swept
+- Audit type
+- Count of findings
+- Top 3 GitHub issue URLs (if any)
 
-## High Priority ({N})
-- [#{NUM}](URL) — one-line description
-
-## Medium Priority ({N})
-- [#{NUM}](URL) — one-line description
-
-## Key Findings
-- bullet points
-
-## Positive Notes
-- what's well-implemented
-```
-
-**Step 6: No Telegram**
-
-Do NOT send a Telegram message. The `/briefing morning` skill reads `latest.md` automatically and includes it in the morning briefing.
+Or, if this sweep feeds a daily briefing, **don't post** — let the briefing pick up the latest report.
 
 ### 2. Status
 
 Show sweep health without running anything:
 
-```bash
-python3 ~/assistant/audit-tracker.py stale
-```
-```bash
-python3 ~/assistant/audit-tracker.py history
-```
-```bash
-cat ~/assistant/audit-results/latest.md
-```
+- Last swept repo + when
+- List of repos and their last-swept timestamps (identify stalest)
+- Most recent sweep's findings
 
-Reports: last audit date/repo, stalest repos needing attention, full audit history, and the most recent findings.
+## Failure handling
 
-## Failure Handling
+- Target picker returns nothing → all repos recently audited. Emit "all repos current" and exit.
+- Subagent fails / times out → log the failure and move on. Don't block future sweeps.
+- Target directory doesn't exist → let the planning skill discover the right paths automatically.
+- Issue creation fails → still log findings locally; flag the permission problem.
 
-- If `rolling-audit.sh suggest` returns no suggestion → all repos recently audited. Write "All repos current" to latest.md.
-- If the subagent fails or times out → log the failure with `audit-tracker.py`, write an error summary to latest.md noting the repo and failure reason.
-- If the suggested directory doesn't exist in the repo → the planning skill will scan the repo and find the right directories automatically. Don't fail on this.
-- If GitHub issue creation fails (permissions) → still log findings to latest.md without issue links.
+## Rules
 
-## Cron Integration
+- **Never cross repo boundaries.** Each sweep targets exactly one repo.
+- **Always `--auto`** — sweeps are unattended.
+- **Subagent, not main context** — preserve your context for orchestration.
+- **Cap findings** at ~10 new issues per sweep to avoid flooding.
+- **Always pull latest `main`** before auditing.
 
-The 9pm weekday cron (`evening-audit.sh`) sends `/sweep` to the tmux session. The skill handles everything from there.
+## Cron Integration (optional)
 
 ```
-# In crontab:
-0 21 * * 1-5 <BOT_DIR>/evening-audit.sh
+# Example: nightly weekday sweep at 21:00
+0 21 * * 1-5 <BOT_DIR>/evening-audit.sh        # points this skill at /sweep
 ```
 
 ## Instructions
 
-1. Always use `rolling-audit.sh suggest` to pick the target — never choose manually
-2. Always pull latest code before auditing
-3. Always run via background subagent — don't block the main session
-4. Always log with `audit-tracker.py` after completion, even on failure
-5. Always overwrite `latest.md` with fresh results
-6. The directory suggestion is a hint — if it doesn't exist, let the planning skill discover the right paths
+1. Always use the target picker — never choose manually unless the user explicitly passes a repo.
+2. Always pull latest main before auditing.
+3. Always run via background subagent.
+4. Always log the sweep after completion, even on failure.
+5. If the suggested directory doesn't exist, let the planning skill discover the right paths.
 
 $ARGUMENTS
